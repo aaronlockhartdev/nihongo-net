@@ -12,6 +12,48 @@ from tensorflow.python.keras.layers.einsum_dense import EinsumDense
 from tensorflow.python.keras.utils import tf_utils
 
 class MixedMultiHeadAttention(Layer):
+    """
+    MixedMultiHeadAttention layer.
+
+    Implementation of mixed, multi-headed attention (MMA) based on "Mixed Multi-Head 
+    Self-Attention for Neural Machine Translation". 
+
+    This layer first applies learned projections to `query`, `key`, and `value`. These
+    are a 2D matrix of tensors of the shape (4, num_heads / 4).
+
+    The resulting query and key tensors are dot-product and scaled by 1 / sqrt(key_dim),
+    then a different mask is added to each of the 4 projection groups corresponding to
+    g (global), l (local), f (forward), and b (backward) and consisting of values 0 or
+    -inf. The output is then softmaxed to obtain attention probabilities (all -inf values
+    become 0 after softmax). In training, dropout is applied, and the dot-product of the new, 
+    sparse probablities and the value tensor is taken.
+
+    The result is flattened along the axes corresponding to the 4 projection groups and the
+    `num_heads` projections, effectively concatenating the attention outputs of each set of
+    learned qkv projections along the last axis. Finally, another projection is applied to each
+    timestep, bringing the shape back to the original.
+
+    Arguments:
+        num_heads: Number of attention heads.
+        key_dim: Size of each attention head for query and key.
+        local_scope: Size of range considered local for local mask.
+        num_timesteps: Number of timesteps.
+        num_features: Number of features.
+        value_dim:  Size of each attention head for value.
+        dropout: Dropout probability.
+    Call arguments:
+        query: Query `Tensor` of shape `[B, T, dim]`.
+        value: Value `Tensor` of shape `[B, S, dim]`.
+        key: Optional key `Tensor` of shape `[B, S, dim]`. If not given, will use
+            `value` for both `key` and `value`, which is the most common case.
+        training: Python boolean indicating whether the layer should behave in
+            training mode (adding dropout) or in inference mode (no dropout).
+            Defaults to either using the training mode of the parent layer/model,
+            or False (inference) if there is no parent layer.
+    
+    Returns:
+        attention_output: Result of computation.
+    """
     def __init__(   self,
                     num_heads,
                     key_dim,
@@ -104,9 +146,9 @@ class MixedMultiHeadAttention(Layer):
 
         attention_scores = tf.add(attention_scores, self._masks)
 
-        attention_scores = self._softmax.call(attention_scores)
+        attention_scores = self._softmax(attention_scores)
 
-        attention_scores_dropout = self._dropout_layer.call(    attention_scores,
+        attention_scores_dropout = self._dropout_layer(    attention_scores,
                                                                 training=training)
 
         attention_output = tf.einsum("...bcde,...bcef->...dbcf", attention_scores_dropout, value)

@@ -9,6 +9,17 @@ from feed_forward_network import FeedForwardNetwork
 
 class Decoder(Layer):
     def __init__(self):
+        """
+        Decoder layer.
+
+        Decoder layer based on model architectures of "Attention is all you Need" and 
+        "Mixed Multi-Head Self-Attention for Neural Machine Translation".
+
+        This layer passes its input through three layers: a self-attention layer and an 
+        encoder-decoder attention layer both using the mixed, multi-head attention layer
+        and a feed forward network consisting of several dense layers. Residual connections 
+        and layer normalization are performed for all three.
+        """
         super(Decoder, self).__init__()
         self._self_attention = MixedMultiHeadAttention( num_heads=48,
                                 key_dim=64,

@@ -8,6 +8,17 @@ from mixed_multihead_attention import MixedMultiHeadAttention
 from feed_forward_network import FeedForwardNetwork
 
 class Encoder(Layer):
+    """
+    Encoder layer.
+
+    Encoder layer based on model architectures of "Attention is all you Need" and 
+    "Mixed Multi-Head Self-Attention for Neural Machine Translation".
+
+    This layer passes its input through two layers: a self-attention layer using
+    the mixed, multi-head attention layer and a feed forward network consisting of
+    several dense layers. Residual connections and layer normalization are performed
+    for both.
+    """
     def __init__(self):
         super(Encoder, self).__init__()
         self._self_attention = MixedMultiHeadAttention( num_heads=48,
