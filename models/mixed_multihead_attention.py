@@ -109,7 +109,7 @@ class MixedMultiHeadAttention(Layer):
         attention_scores_dropout = self._dropout_layer.call(    attention_scores,
                                                                 training=training)
 
-        attention_output = tf.einsum("abcde,abcef->adbcf", attention_scores_dropout, value)
+        attention_output = tf.einsum("...bcde,...bcef->...dbcf", attention_scores_dropout, value)
 
         attention_output = tf.reshape(attention_output, [-1, self._num_timesteps, self._num_mixed_heads * 4 * self._value_dim])
 

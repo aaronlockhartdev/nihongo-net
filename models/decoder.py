@@ -10,13 +10,13 @@ from feed_forward_network import FeedForwardNetwork
 class Decoder(Layer):
     def __init__(self):
         super(Decoder, self).__init__()
-        self._self_attention = MixedMultiHeadAttention(  num_heads=48,
-                                            key_dim=64,
-                                            local_scope=4,
-                                            num_timesteps=128,
-                                            num_features=3072,
-                                            dropout=0.2)
-        self._encoder_decoder_attention = MixedMultiHeadAttention( num_heads=48,
+        self._self_attention = MixedMultiHeadAttention( num_heads=48,
+                                key_dim=64,
+                                local_scope=4,
+                                num_timesteps=128,
+                                num_features=3072,
+                                dropout=0.2)
+        self._encoder_decoder_attention = MixedMultiHeadAttention(  num_heads=48,
                                             key_dim=64,
                                             local_scope=4,
                                             num_timesteps=128,

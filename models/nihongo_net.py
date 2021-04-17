@@ -16,38 +16,39 @@ mixed_precision.set_global_policy(policy)
 class NihongoNet(Model):
     def __init__(self):
         super(NihongoNet, self).__init__()
-        # self.emb = Embedding(None, 3072)
+        self._embedding = Embedding(30000, 3072, input_length=128)
 
-        self.enc1 = Encoder()
-        self.enc2 = Encoder()
+        self._encoder_0 = Encoder()
+        self._encoder_1 = Encoder()
 
-        self.dec1 = Decoder()
-        self.dec2 = Decoder()
+        self._decoder_0 = Decoder()
+        self._decoder_1 = Decoder()
 
-        self.lin = TimeDistributed(Dense(3072, activation="softmax"))
+        self._dense = TimeDistributed(Dense(3072, activation="softmax"))
 
     def call(self, x, training=False):
-        x = self.enc1.call(x, training=training)
-        x = self.enc2.call(x, training=training)
+        x = self._embedding(x)
+        x = self._encoder_0(x, training=training)
+        x = self._encoder_1(x, training=training)
 
         enc_out = x
-        x = self.dec1.call(x, enc_out, training=training)
-        x = self.dec2.call(x, enc_out, training=training)
+        x = self._decoder_0(x, enc_out, training=training)
+        x = self._decoder_1(x, enc_out, training=training)
 
-        x = self.lin(x)
+        x = self._dense(x)
 
         return x
 
     def prep_build(self):
-        self.enc1.build((32, 128, 3072))
-        self.enc2.build((32, 128, 3072))
+        self._encoder_0.build((32, 128, 3072))
+        self._encoder_1.build((32, 128, 3072))
 
-        self.dec1.build((32, 128, 3072))
-        self.dec2.build((32, 128, 3072))
+        self._decoder_0.build((32, 128, 3072))
+        self._decoder_1.build((32, 128, 3072))
 
 if __name__ == "__main__":
     nihongo_net = NihongoNet()
     nihongo_net.compile(optimizer="Adam", loss="cross_entropy", metrics=["cross_entropy", "acc"])
     nihongo_net.prep_build()
-    nihongo_net.build((32, 128, 3072))
+    nihongo_net.build((32, 128))
     nihongo_net.summary()
