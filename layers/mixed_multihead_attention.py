@@ -52,6 +52,8 @@ class MixedMultiHeadAttention(Layer):
         num_heads=8,
         local_scope=4,
         att_mask=None,
+        seq_len=512,
+        model_dim=512,
         key_dim=64,
         value_dim=None,
         **kwargs,
@@ -65,27 +67,25 @@ class MixedMultiHeadAttention(Layer):
         self._num_heads = num_heads
         self._local_scope = local_scope
         self._att_mask = att_mask
+        self._seq_len = seq_len
+        self._model_dim = model_dim
         self._key_dim = key_dim
         self._value_dim = value_dim if value_dim else key_dim
-
-    def build(self, input_shape):
-        self._timesteps = input_shape[1]
-        self._model_dim = input_shape[2]
 
         # Initialize learned linear projections for query, key, and value
         self._query_projection = EinsumDense(
             "abx,cxd->acbd",
-            output_shape=(self._num_heads, self._timesteps, self._key_dim),
+            output_shape=(self._num_heads, self._seq_len, self._key_dim),
         )
 
         self._key_projection = EinsumDense(
             "abx,cxd->acbd",
-            output_shape=(self._num_heads, self._timesteps, self._key_dim),
+            output_shape=(self._num_heads, self._seq_len, self._key_dim),
         )
 
         self._value_projection = EinsumDense(
             "abx,cxd->acbd",
-            output_shape=(self._num_heads, self._timesteps, self._key_dim),
+            output_shape=(self._num_heads, self._seq_len, self._key_dim),
         )
 
         # Initialize softmax layer
@@ -94,25 +94,25 @@ class MixedMultiHeadAttention(Layer):
         # Initialize learned projections of attention heads
         self._output_projection = EinsumDense(
             equation="axby,xyc->abc",
-            output_shape=(self._timesteps, self._model_dim),
+            output_shape=(self._seq_len, self._model_dim),
         )
 
         # Expand dims for att_mask
-        if self._att_mask:
-            while len(self._att_mask.shape) - 1 < len(input_shape):
+        if self._att_mask is not None:
+            while len(self._att_mask.shape) < 4:
                 self._att_mask = tf.expand_dims(self._att_mask, axis=0)
 
         # Initialize mixed masks
         def _init_masks():
             import numpy as np
 
-            g = np.zeros((self._timesteps, self._timesteps))
-            l = np.zeros((self._timesteps, self._timesteps))
-            f = np.zeros((self._timesteps, self._timesteps))
-            b = np.zeros((self._timesteps, self._timesteps))
+            g = np.zeros((self._seq_len, self._seq_len))
+            l = np.zeros((self._seq_len, self._seq_len))
+            f = np.zeros((self._seq_len, self._seq_len))
+            b = np.zeros((self._seq_len, self._seq_len))
 
-            for i in range(self._timesteps):
-                for j in range(self._timesteps):
+            for i in range(self._seq_len):
+                for j in range(self._seq_len):
                     if not (i - self._local_scope <= j <= i + self._local_scope):
                         l[i, j] = np.NINF
                     if i > j:
@@ -120,12 +120,10 @@ class MixedMultiHeadAttention(Layer):
                     if i < j:
                         b[i, j] = np.NINF
 
-            masks = tf.constant(
-                [g for _ in range(self._num_heads // 4)]
-                + [l for _ in range(self._num_heads // 4)]
-                + [f for _ in range(self._num_heads // 4)]
-                + [b for _ in range(self._num_heads // 4)],
-                dtype=tf.float32,
+            masks = tf.repeat(
+                tf.constant([g, l, f, b], dtype=tf.float32),
+                repeats=self._num_heads // 4,
+                axis=0,
             )
             return masks
 
@@ -148,7 +146,7 @@ class MixedMultiHeadAttention(Layer):
         att_probs = tf.add(att_probs, self._mixed_masks)
 
         # Apply softmax to num_heads * 2D attention arrays
-        if self._att_mask:
+        if self._att_mask is not None:
             att_probs = self._softmax(att_probs, self._att_mask)
         else:
             att_probs = self._softmax(att_probs)

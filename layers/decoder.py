@@ -1,10 +1,12 @@
+from operator import mod
+from statistics import mode
 import tensorflow as tf
 
 # Workaround for TF 2.8 concerning IDE imports and lazy loading
 from keras.api._v2.keras.layers import Layer, Dropout, LayerNormalization
 
-from mixed_multihead_attention import MixedMultiHeadAttention
-from feed_forward import FeedForward
+from .mixed_multihead_attention import MixedMultiHeadAttention
+from .feed_forward import FeedForward
 
 
 class Decoder(Layer):
@@ -23,10 +25,12 @@ class Decoder(Layer):
     def __init__(
         self,
         num_heads=8,
+        model_dim=512,
         key_dim=64,
         value_dim=None,
         ff_dim=2048,
         dropout=0.1,
+        seq_len=512,
         **kwargs
     ):
         # Initialize superclass
@@ -34,14 +38,29 @@ class Decoder(Layer):
 
         # Initialize class variables
         self._num_heads = num_heads
+        self._model_dim = model_dim
         self._key_dim = key_dim
         self._value_dim = value_dim if value_dim else key_dim
         self._ff_dim = ff_dim
         self._dropout = dropout
+        self._seq_len = seq_len
 
         # Initialize masked mixed multi-head attention sublayer
+        def _init_mask():
+            import numpy as np
+
+            mask = np.zeros((self._seq_len, self._seq_len))
+            for i in range(self._seq_len):
+                for j in range(self._seq_len):
+                    if i > j:
+                        mask[i, j] = 1
+
+            return tf.constant(mask, dtype=tf.float32)
+
         self._mmma_layer = MixedMultiHeadAttention(
             num_heads=self._num_heads,
+            att_mask=_init_mask(),
+            model_dim=self._model_dim,
             key_dim=self._key_dim,
             value_dim=self._value_dim,
         )
@@ -51,6 +70,7 @@ class Decoder(Layer):
         # Initialize mixed multi-head attention sublayer
         self._mma_layer = MixedMultiHeadAttention(
             num_heads=self._num_heads,
+            model_dim=self._model_dim,
             key_dim=self._key_dim,
             value_dim=self._value_dim,
         )
@@ -58,7 +78,10 @@ class Decoder(Layer):
         self._mma_norm_layer = LayerNormalization()
 
         # Initialize feed forward sublayer
-        self._ff_layer = FeedForward(ff_dim=self._ff_dim)
+        self._ff_layer = FeedForward(
+            model_dim=self._model_dim,
+            ff_dim=self._ff_dim,
+        )
         self._ff_drop_layer = Dropout(self._dropout)
         self._ff_norm_layer = LayerNormalization()
 

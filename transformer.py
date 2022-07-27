@@ -1,11 +1,16 @@
 import tensorflow as tf
 
-from encoder import Encoder
-from decoder import Decoder
+from layers.encoder import Encoder
+from layers.decoder import Decoder
 
 # Workaround for TF 2.8 concerning IDE imports and lazy loading
 from keras.api._v2.keras import Model
-from keras.api._v2.keras.layers import Dense, TimeDistributed, Embedding
+from keras.api._v2.keras.layers import (
+    Dense,
+    TimeDistributed,
+    Embedding,
+    TextVectorization,
+)
 
 # policy = mixed_precision.Policy('mixed_float16')
 # mixed_precision.set_global_policy(policy)
@@ -21,7 +26,7 @@ class Transformer(Model):
         model_dim=512,
         ff_dim=2048,
         dropout=0.1,
-        timesteps=512,
+        seq_len=512,
         **kwargs
     ):
         super(Transformer, self).__init__(**kwargs)
@@ -33,9 +38,16 @@ class Transformer(Model):
         self._model_dim = model_dim
         self._ff_dim = ff_dim
         self._dropout = dropout
-        self._timesteps = timesteps
+        self._seq_len = seq_len
 
-        self._embedding = Embedding(37000, 512)
+        self._vectorization = TextVectorization(
+            max_tokens=30000,
+            standardize="lower",
+            split="whitespace",
+            output_sequence_length=self._seq_len,
+        )
+
+        self._embedding = Embedding(30000, 512)
 
         self._encoders = [
             Encoder(
@@ -44,6 +56,7 @@ class Transformer(Model):
                 value_dim=self._value_dim,
                 ff_dim=self._ff_dim,
                 dropout=self._dropout,
+                seq_len=self._seq_len,
             )
             for _ in range(self._num_layers)
         ]
@@ -55,11 +68,23 @@ class Transformer(Model):
                 value_dim=self._value_dim,
                 ff_dim=self._ff_dim,
                 dropout=self._dropout,
+                seq_len=self._seq_len,
             )
             for _ in range(self._num_layers)
         ]
 
         self._dense = TimeDistributed(Dense(self._model_dim, activation="softmax"))
+
+    def adapt(self, dataset):
+        self._vectorization.adapt(dataset)
+
+    def build(self, input_shape):
+        """
+        Workaround for difficulties with shape tracking for sublayers
+        """
+        self.call(tf.keras.Input(shape=input_shape[1:]))
+
+        super(Transformer, self).build(input_shape)
 
     def call(self, x, training=False):
         x = self._embedding(x)
@@ -82,5 +107,5 @@ if __name__ == "__main__":
     nihongo_net.compile(
         optimizer="Adam", loss="cross_entropy", metrics=["cross_entropy", "acc"]
     )
-    nihongo_net.build((None, 128))
+    nihongo_net.build((None, 512))
     nihongo_net.summary()
