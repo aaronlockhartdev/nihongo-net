@@ -1,5 +1,5 @@
 from transformer import Transformer
-from dataset import build_dataset
+from tokenize import build_dataset
 
 if __name__ == "__main__":
     train, test = build_dataset()
